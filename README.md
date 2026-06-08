@@ -1,5 +1,7 @@
 # Claude HUD
 
+> [🇨🇳 中文](README_CN.md)
+
 A **H**eads-**U**p **D**isplay for Claude Code in VS Code sidebar.
 
 Real-time visibility into token usage, context window, agent status, and history — all from the Activity Bar, no terminal needed.

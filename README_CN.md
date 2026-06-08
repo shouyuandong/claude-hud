@@ -1,5 +1,7 @@
 # Claude HUD
 
+> [🇬🇧 English](README.md)
+
 VS Code 侧边栏中的 Claude Code **H**eads-**U**p **D**isplay（实时监控面板）。
 
 实时查看 Token 用量、上下文窗口、Agent 状态和历史记录，无需终端，直接在活动栏中呈现。
