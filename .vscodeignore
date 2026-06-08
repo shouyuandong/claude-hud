@@ -1,0 +1,10 @@
+.gitignore
+.gitattributes
+.vscode/**
+**/*.ts
+**/*.map
+tsconfig.json
+node_modules/**
+.agents/**
+.claude/**
+skills-lock.json

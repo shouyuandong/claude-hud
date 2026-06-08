@@ -1,0 +1,111 @@
+{
+  "name": "claude-hud",
+  "displayName": "Claude HUD",
+  "description": "Real-time token usage, context length, and task progress HUD for Claude Code",
+  "version": "0.1.0",
+  "icon": "media/icon.png",
+  "publisher": "claude-hud",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee-shouyuan/jalen-7/claude-hud.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:claudeHud.panel"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeHud",
+          "title": "Claude HUD",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claudeHud": [
+        {
+          "type": "webview",
+          "id": "claudeHud.panel",
+          "name": "Claude HUD"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "claudeHud.focus",
+        "title": "Focus Claude HUD Panel"
+      }
+    ],
+    "configuration": {
+      "title": "Claude HUD",
+      "properties": {
+        "claudeHud.modules": {
+          "type": "object",
+          "default": {
+            "agentStatus": true,
+            "tokenFlow": true,
+            "contextWindow": true,
+            "historyChart": true,
+            "sessionTime": true,
+            "cost": true,
+            "configStats": true,
+            "todos": true
+          },
+          "description": "Toggle visibility of each HUD module",
+          "properties": {
+            "agentStatus": { "type": "boolean", "description": "Show agent status overview" },
+            "tokenFlow": { "type": "boolean", "description": "Show real-time token flow bars" },
+            "contextWindow": { "type": "boolean", "description": "Show context window progress" },
+            "historyChart": { "type": "boolean", "description": "Show historical token chart" },
+            "sessionTime": { "type": "boolean", "description": "Show session timer" },
+            "cost": { "type": "boolean", "description": "Show cost breakdown" },
+            "configStats": { "type": "boolean", "description": "Show config statistics" },
+            "todos": { "type": "boolean", "description": "Show todo list" }
+          }
+        },
+        "claudeHud.language": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "en", "zh", "ja"],
+          "enumItemLabels": ["Auto", "English", "中文", "日本語"],
+          "enumDescriptions": [
+            "Follow VS Code display language",
+            "",
+            "",
+            ""
+          ],
+          "description": "HUD interface language (requires reload)"
+        },
+        "claudeHud.pricing": {
+          "type": "object",
+          "default": {},
+          "description": "Custom token pricing (USD per 1M tokens). Leave empty to use model-detected pricing.",
+          "properties": {
+            "input": { "type": "number", "default": 0, "description": "Input tokens price per 1M (USD)" },
+            "output": { "type": "number", "default": 0, "description": "Output tokens price per 1M (USD)" },
+            "cacheRead": { "type": "number", "default": 0, "description": "Cache read (hit) price per 1M (USD)" },
+            "cacheWrite": { "type": "number", "default": 0, "description": "Cache write (creation) price per 1M (USD)" }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,896 @@
+/* ===================================================
+   Claude HUD — design-taste-frontend compliant styles
+   Palette: Zinc-900 base, Emerald-400 accent (dark)
+            Gray-50 base, Emerald-600 accent (light)
+   No emoji, no outer glow, no pure black
+   Spring physics: cubic-bezier(0.16, 1, 0.3, 1)
+   =================================================== */
+
+/* ---- Theme CSS variables (default = dark) ---- */
+:root, [data-theme="dark"] {
+  --hud-bg: #18181b;
+  --hud-surface: #27272a;
+  --hud-border: rgba(63, 63, 70, 0.5);
+  --hud-accent: #34d399;
+  --hud-text: #f4f4f5;
+  --hud-text-dim: #a1a1aa;
+  --hud-text-muted: #52525b;
+  --hud-text-muted2: #71717a;
+  --hud-warning: #fbbf24;
+  --hud-danger: #f87171;
+  --hud-blue: #60a5fa;
+  --hud-scrollbar: #3f3f46;
+  --hud-btn-hover: #3f3f46;
+  --hud-overlay-bg: rgba(0, 0, 0, 0.5);
+  --hud-popover-bg: #27272a;
+  --hud-popover-border: rgba(63, 63, 70, 0.5);
+  --hud-popover-text: #d4d4d8;
+  --hud-shimmer-from: #f4f4f5;
+  --hud-shimmer-mid: #a1a1aa;
+  --hud-text-empty: #52525b;
+}
+
+[data-theme="light"] {
+  --hud-bg: #fafafa;
+  --hud-surface: #ffffff;
+  --hud-border: rgba(161, 161, 170, 0.4);
+  --hud-accent: #059669;
+  --hud-text: #18181b;
+  --hud-text-dim: #52525b;
+  --hud-text-muted: #a1a1aa;
+  --hud-text-muted2: #a1a1aa;
+  --hud-warning: #d97706;
+  --hud-danger: #dc2626;
+  --hud-blue: #2563eb;
+  --hud-scrollbar: #d4d4d8;
+  --hud-btn-hover: #e4e4e7;
+  --hud-overlay-bg: rgba(0, 0, 0, 0.15);
+  --hud-popover-bg: #ffffff;
+  --hud-popover-border: rgba(161, 161, 170, 0.4);
+  --hud-popover-text: #3f3f46;
+  --hud-shimmer-from: #18181b;
+  --hud-shimmer-mid: #52525b;
+  --hud-text-empty: #a1a1aa;
+}
+
+/* ---- Reset & base ---- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  min-width: 320px;
+  overflow-x: auto;
+  background: var(--hud-bg);
+  color: var(--hud-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hud-scrollbar);
+  border-radius: 2px;
+}
+
+/* ---- Header ---- */
+.hud-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--hud-border);
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.hud-logo {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.hud-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--hud-text);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.hud-status {
+  margin-left: auto;
+  font-size: 10px;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  color: var(--hud-text-dim);
+  text-transform: uppercase;
+}
+
+/* ---- Plan Mode Badge ---- */
+.plan-badge {
+  font-size: 9px;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--hud-warning);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  line-height: 1.4;
+  animation: planPulse 2s ease-in-out infinite;
+}
+.plan-badge.hidden {
+  display: none;
+}
+
+.model-badge {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 9px;
+  color: var(--hud-text-dim);
+  background: var(--hud-btn-hover);
+  border-radius: 3px;
+  padding: 1px 5px;
+  line-height: 1.4;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+@keyframes planPulse {
+  0%, 100% { opacity: 0.7; border-color: rgba(251, 191, 36, 0.25); }
+  50% { opacity: 1; border-color: rgba(251, 191, 36, 0.5); }
+}
+
+.hud-settings-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hud-settings-btn:hover {
+  background: var(--hud-btn-hover);
+}
+.hud-settings-btn:active {
+  transform: scale(0.95);
+}
+
+/* ---- Perpetual micro-interaction: header shimmer ---- */
+.hud-title {
+  background: linear-gradient(90deg, var(--hud-shimmer-from) 0%, var(--hud-shimmer-mid) 50%, var(--hud-shimmer-from) 100%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- Modules ---- */
+.hud-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hud-module {
+  background: var(--hud-surface);
+  border: 1px solid var(--hud-border);
+  border-radius: 6px;
+  padding: 14px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: height 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 48px;
+  overflow: hidden;
+}
+
+.hud-module.hidden {
+  display: none;
+}
+
+.module-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hud-text-dim);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+/* Center the title text between drag handle and spacer/buttons */
+.title-text {
+  flex: 1;
+  text-align: center;
+}
+
+.title-spacer {
+  width: 18px; /* match drag handle width to balance centering */
+  flex-shrink: 0;
+}
+
+/* ---- Drag handle ---- */
+.drag-handle {
+  cursor: grab;
+  color: var(--hud-text-muted);
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drag-handle:hover {
+  color: var(--hud-text-dim);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ---- Candle toggle button ---- */
+.candle-toggle {
+  background: none;
+  border: 1px solid var(--hud-border);
+  cursor: pointer;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+.candle-toggle:hover {
+  background: var(--hud-btn-hover);
+}
+.candle-toggle:hover svg {
+  stroke: var(--hud-accent);
+}
+.candle-toggle.active {
+  border-color: var(--hud-accent);
+  background: color-mix(in srgb, var(--hud-accent) 10%, transparent);
+}
+.candle-toggle.active svg {
+  stroke: var(--hud-accent);
+}
+
+/* ---- Drag states ---- */
+.hud-module.dragging {
+  opacity: 0.4;
+  border-style: dashed;
+  border-color: var(--hud-accent);
+}
+.hud-module.drag-over {
+  border-color: var(--hud-accent);
+  box-shadow: inset 0 2px 0 var(--hud-accent);
+  transform: translateY(2px);
+}
+
+/* ---- Agent Tree ---- */
+.agent-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 120px;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.agent-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--hud-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-task {
+  font-size: 10px;
+  color: var(--hud-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-tool {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-tool-name {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--hud-accent);
+  background: color-mix(in srgb, var(--hud-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hud-accent) 25%, transparent);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.agent-tool-file {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 9px;
+  color: var(--hud-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.agent-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.agent-tokens {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 9px;
+  color: var(--hud-text-dim);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Agent status dot — perpetual breathing micro-interaction */
+.agent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.agent-dot.idle {
+  background: var(--hud-text-muted);
+}
+.agent-dot.thinking {
+  background: var(--hud-warning);
+  animation: breathe 1.5s ease-in-out infinite;
+}
+.agent-dot.working {
+  background: var(--hud-accent);
+  animation: breathe 2s ease-in-out infinite;
+}
+.agent-dot.done {
+  background: var(--hud-accent);
+}
+.agent-dot.error {
+  background: var(--hud-danger);
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes todoBreathe {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ---- Token Flow — Matrix Rain Canvas ---- */
+.burst-bars {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.burst-bars canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.burst-label {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 10px;
+  color: var(--hud-text-dim);
+  margin-top: 4px;
+  text-align: right;
+  transition: color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+
+/* ---- Context Window (progress bar) ---- */
+.context-bar-track {
+  background: var(--hud-scrollbar);
+  border-radius: 4px;
+  height: 12px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.context-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.3s ease;
+}
+
+.context-label {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  color: var(--hud-text-dim);
+  margin-top: 8px;
+  text-align: right;
+}
+
+.detail-label {
+  color: var(--hud-text-muted2);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.detail-value {
+  color: var(--hud-text-dim);
+  font-size: 10px;
+}
+
+.detail-value.in-color {
+  color: var(--hud-blue);
+}
+
+.detail-value.out-color {
+  color: var(--hud-accent);
+}
+
+.section-detail-divider {
+  width: 1px;
+  height: 10px;
+  background: var(--hud-border);
+}
+
+/* ---- History Chart ---- */
+.chart-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.chart-tab {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--hud-text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 1px 6px;
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chart-tab:hover {
+  color: var(--hud-text);
+  background: var(--hud-btn-hover);
+}
+.chart-tab.active {
+  color: var(--hud-accent);
+  border-color: var(--hud-accent);
+}
+
+.chart-canvas-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+.chart-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 80px;
+  border-radius: 4px;
+}
+
+.chart-total {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 10px;
+  color: var(--hud-text-dim);
+  margin-top: 4px;
+  text-align: right;
+}
+
+/* ---- Footer ---- */
+.hud-footer {
+  text-align: center;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 10px;
+  color: var(--hud-text-muted);
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--hud-border);
+  margin-top: 8px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hud-footer.hidden {
+  display: none;
+}
+
+/* ---- Settings Overlay ---- */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--hud-overlay-bg);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.settings-overlay.hidden {
+  display: none;
+}
+
+.settings-panel {
+  background: var(--hud-popover-bg);
+  border: 1px solid var(--hud-popover-border);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 200px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.settings-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hud-text);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--hud-popover-text);
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.settings-item input[type="checkbox"] {
+  accent-color: var(--hud-accent);
+}
+
+/* ---- SVG icon colors ---- */
+.hud-logo-svg polygon,
+.hud-logo-svg circle {
+  stroke: var(--hud-accent);
+}
+.hud-logo-svg polygon:last-of-type,
+.hud-logo-svg circle {
+  fill: var(--hud-accent);
+}
+.hud-logo-svg polygon:first-of-type {
+  fill: none;
+}
+
+.settings-btn-svg {
+  stroke: var(--hud-text-dim);
+}
+
+.candle-toggle-svg {
+  stroke: var(--hud-text-dim);
+}
+
+/* ---- Cost ---- */
+.cost-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cost-total {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--hud-text);
+  text-align: center;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.cost-sep-dot {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--hud-text-muted);
+  margin: 0 2px;
+}
+
+.cost-detail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  font-size: 10px;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+.cost-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+/* ---- Config Grid ---- */
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.config-card {
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.config-card:hover {
+  border-color: var(--hud-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.config-card-value {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--hud-accent);
+  line-height: 1.2;
+}
+
+.config-card-label {
+  font-size: 9px;
+  color: var(--hud-text-muted2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Tool Activity ---- */
+.tool-placeholder {
+  text-align: center;
+  color: var(--hud-text-empty);
+  font-size: 10px;
+  padding: 12px 0;
+}
+
+.tool-table {
+  overflow-x: auto;
+}
+
+.tool-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+.tool-table th {
+  color: var(--hud-text-muted2);
+  font-weight: 600;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px 4px;
+  text-align: left;
+  border-bottom: 1px solid var(--hud-border);
+}
+
+.tool-table td {
+  padding: 3px 6px;
+  color: var(--hud-text-dim);
+  border-bottom: 1px solid color-mix(in srgb, var(--hud-border) 50%, transparent);
+}
+
+.tool-table .tool-name {
+  color: var(--hud-text);
+  font-weight: 500;
+}
+
+.tool-table .tool-file-cell {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-now {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  color: var(--hud-text);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.tool-file {
+  font-size: 9px;
+  color: var(--hud-text-muted2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.tool-table .tool-count {
+  text-align: right;
+  color: var(--hud-accent);
+  font-weight: 600;
+}
+
+.tool-table .tool-ago {
+  text-align: right;
+  color: var(--hud-text-muted2);
+}
+
+/* ---- Todos ---- */
+.todos-placeholder {
+  text-align: center;
+  color: var(--hud-text-empty);
+  font-size: 10px;
+  padding: 12px 0;
+}
+
+.todos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.todo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.todo-dot.active {
+  background: var(--hud-warning);
+  animation: todoBreathe 1.2s ease-in-out infinite;
+}
+
+.todo-dot-ring {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1.5px solid var(--hud-text-muted);
+  box-sizing: border-box;
+}
+
+.todo-check {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--hud-accent);
+  flex-shrink: 0;
+  width: 8px;
+  text-align: center;
+}
+
+.todo-text {
+  flex: 1;
+  font-size: 10px;
+  color: var(--hud-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-done-text {
+  color: var(--hud-text);
+}
+
+.todo-done {
+  opacity: 0.6;
+}
+
+.todo-active-text {
+  color: var(--hud-warning);
+}
+
+.todo-agent {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--hud-blue);
+  background: color-mix(in srgb, var(--hud-blue) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hud-blue) 25%, transparent);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
+  flex-shrink: 0;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-file {
+  font-size: 9px;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  color: var(--hud-text-muted2);
+  flex-shrink: 0;
+  max-width: 80px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-progress {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 9px;
+  color: var(--hud-text-muted2);
+  margin-left: auto;
+  margin-right: 6px;
+}
