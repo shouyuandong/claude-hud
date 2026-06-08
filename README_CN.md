@@ -1,6 +1,6 @@
 # Claude HUD
 
-> [🇬🇧 English](README.md)
+> [English](README.md) · **中文**
 
 VS Code 侧边栏中的 Claude Code **H**eads-**U**p **D**isplay（实时监控面板）。
 

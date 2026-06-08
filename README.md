@@ -1,6 +1,6 @@
 # Claude HUD
 
-> [🇨🇳 中文](README_CN.md)
+> **English** · [中文](README_CN.md)
 
 A **H**eads-**U**p **D**isplay for Claude Code in VS Code sidebar.
 
