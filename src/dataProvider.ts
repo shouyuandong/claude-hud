@@ -918,6 +918,9 @@ export class DataProvider {
           sess.totalOutputTokens += newOutput;
           sess.totalCacheHitTokens += newCacheHit;
           sess.totalCacheWriteTokens += newCacheWrite;
+          if (latestActivity > (sess.lastActivity || 0)) {
+            sess.lastActivity = latestActivity;
+          }
           sess.knownSize = newSize;
           sess.knownLines += newLines.length;
         } else if (newSize < sess.knownSize) {
@@ -1132,7 +1135,10 @@ export class DataProvider {
     // Task progress estimation (based on whether we're in an active conversation)
     const isActive = this.sessions.some(s => s.isActive);
     const hasActiveAgents = allAgents.some(a => a.status === 'working' || a.status === 'thinking');
-    const hasRecentActivity = this.burstRate > 0 || hasActiveAgents;
+    // Also consider recent activity within the last 30 seconds (burstRate decays too fast)
+    const now = Date.now();
+    const hasRecentActivity = this.burstRate > 0 || hasActiveAgents ||
+      this.sessions.some(s => (now - s.lastActivity) < 30000);
     const taskStatus: 'idle' | 'thinking' | 'working' | 'done' | 'error' =
       allAgents.some(a => a.status === 'working') ? 'working' :
       allAgents.some(a => a.status === 'thinking') ? 'thinking' :
@@ -1250,19 +1256,19 @@ export class DataProvider {
             const prevIn = this.resolveInputTokens(secondLastUsage);
             const deltaIn = lastIn - prevIn;
             if (deltaIn > 0 && deltaIn < this.tokenLimit * 1.5) {
-              return Math.min(deltaIn + (lastUsage.output_tokens || 0), this.tokenLimit);
+              return Math.min(deltaIn, this.tokenLimit);
             }
           }
           // Single-message fallback: use the resolve value directly
-          return Math.min(this.resolveInputTokens(lastUsage) + (lastUsage.output_tokens || 0), this.tokenLimit);
+          return Math.min(this.resolveInputTokens(lastUsage), this.tokenLimit);
         } else {
           // === DeepSeek/Gemini: cumulative input_tokens ===
           // The last message's input_tokens is cumulative for the uncached portion,
           // and cache_read_input_tokens represents the cached portion of the context.
-          // Together they form the total context fill.
+          // Together they form the total context fill (output_tokens do not fill context).
           const cacheRead = lastUsage.cache_read_input_tokens || 0;
           const cacheCreate = lastUsage.cache_creation_input_tokens || 0;
-          const totalContext = (lastUsage.input_tokens || 0) + cacheRead + cacheCreate + (lastUsage.output_tokens || 0);
+          const totalContext = (lastUsage.input_tokens || 0) + cacheRead + cacheCreate;
           return Math.min(totalContext, this.tokenLimit);
         }
       }
@@ -1270,8 +1276,8 @@ export class DataProvider {
       // file read error — fall through
     }
 
-    // Ultimate fallback: use session totals capped to limit
-    return Math.min(this.totalInputTokens + this.totalOutputTokens, this.tokenLimit);
+    // Ultimate fallback: use session input tokens capped to limit
+    return Math.min(this.totalInputTokens, this.tokenLimit);
   }
 
   /**
