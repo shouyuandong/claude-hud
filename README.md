@@ -21,6 +21,8 @@ Real-time visibility into token usage, context window, agent status, and history
 - **Drag & Reorder** — Move modules to your preferred order
 - **Auto Theme** — Matches VS Code color theme (light / dark)
 
+![Overview](media/overview.jpg)
+
 ## Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (VS Code extension)

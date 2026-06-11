@@ -2,7 +2,7 @@
   "name": "claude-hud",
   "displayName": "Claude HUD",
   "description": "Real-time token usage, context length, and task progress HUD for Claude Code",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icon": "media/icon.png",
   "publisher": "shouyuandong",
   "repository": {

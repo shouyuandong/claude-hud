@@ -713,7 +713,7 @@ function drawMatrixRain(canvas) {
 }
 
 // ---- Chart Tracer (standalone display mode) ----
-// A single ball stays at ~85% width; the trail scrolls left like an ECG.
+// A single ball stays at ~55% width; the trail scrolls left like an ECG.
 // Token rate controls ball Y (higher rate = higher peak).
 let tracer = null;
 let tracerPath = [];
@@ -723,7 +723,7 @@ const TRACER_TRAIL_LENGTH = 120; // number of trail points
 
 function initTracer(canvasW, canvasH) {
   tracer = {
-    x: (canvasW || 240) * 0.85,
+    x: (canvasW || 240) * 0.55,
     y: (canvasH || 160) * 0.5,
     _canvasW: canvasW || 240,
     _canvasH: canvasH || 160,
@@ -790,7 +790,7 @@ function drawTracerFrame(canvas, rate) {
   // Simplified bounce: activity kicks up, gravity pulls down. Just for fun.
   const rateClamped = Math.max(rate, 0);
   const bottomY = h * 0.65;
-  const bouncePeakY = h * 0.20;
+  const bouncePeakY = h * 0.30;
 
   // Record Y before any movement (for trail)
   const prevY = tracer.y;
@@ -808,19 +808,19 @@ function drawTracerFrame(canvas, rate) {
   // When active and near the ground, kick up with fixed velocity
   // so it always reaches the same peak height regardless of rate.
   if (active && tracer.y >= bottomY - 3) {
-    tracer._vy = -(bottomY - bouncePeakY) * 0.10;
+    tracer._vy = -(bottomY - bouncePeakY) * 0.06;
   }
 
   // Gravity: weaker when active (floats longer), normal when idle
-  const g = active ? 0.18 : 0.38;
+  const g = active ? 0.10 : 0.25;
   tracer._vy += g;
   tracer.y += tracer._vy;
 
   // Ground
   if (tracer.y >= bottomY) {
     tracer.y = bottomY;
-    tracer._vy *= -0.1;
-    if (Math.abs(tracer._vy) < 0.5) tracer._vy = 0;
+    tracer._vy *= -0.05;
+    if (Math.abs(tracer._vy) < 0.3) tracer._vy = 0;
   }
 
   // Ceiling — never above peak
@@ -831,7 +831,7 @@ function drawTracerFrame(canvas, rate) {
 
   // Idle bob
   if (tracer._vy === 0 && !active) {
-    tracer.y += Math.sin(performance.now() / 1200) * 0.8;
+    tracer.y += Math.sin(performance.now() / 2000) * 0.5;
   }
 
   // Scroll speed: faster when active

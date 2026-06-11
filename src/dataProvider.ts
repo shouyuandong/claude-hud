@@ -62,6 +62,12 @@ interface ParsedSession {
   // File tracking for incremental reads
   knownSize: number;
   knownLines: number;
+  // Token dedup: Claude Code can write the same API response 2-3 times (dual-logging)
+  lastUsageKey: string;
+  // Subagent cache: avoid re-reading all agent JSONL files every tick
+  subagentCacheKey: string;
+  subagentCacheAgents: AgentStatus[];
+  subagentCacheTodos: TodoItem[];
 }
 
 export class DataProvider {
@@ -100,6 +106,7 @@ export class DataProvider {
   private tokenLimit = 200000;
   private isAnthropicModel = true; // distinguishes Anthropic from DeepSeek/Gemini API conventions
   private detectedModelName = '';  // actual model string from JSONL
+  private modelDetected = false;   // true once we've scanned a JSONL for the model name
 
   // ---- Pricing (USD per 1M tokens) ----
   private static readonly MODEL_PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
@@ -186,7 +193,21 @@ export class DataProvider {
   }
 
   /**
+   * Check if a session's cwd belongs to the current workspace.
+   * A session is "ours" if its cwd IS the workspace root or is a subdirectory of it.
+   */
+  private isSessionForThisWorkspace(sessionCwd: string): boolean {
+    if (!sessionCwd) return false;
+    const normalizedSession = path.normalize(sessionCwd).toLowerCase();
+    const normalizedCwd = path.normalize(this.cwd).toLowerCase();
+    // Exact match or session is inside our workspace
+    return normalizedSession === normalizedCwd || normalizedSession.startsWith(normalizedCwd + path.sep);
+  }
+
+  /**
    * Scan ~/.claude/sessions/ and ~/.claude/projects/ to discover active sessions.
+   * Only includes sessions whose cwd belongs to the current workspace,
+   * preventing data mixing across multiple VS Code instances.
    * Callable multiple times — already-known sessionIds are skipped.
    */
   private discoverSessions(): void {
@@ -213,10 +234,12 @@ export class DataProvider {
           // Skip already-discovered sessions
           if (knownIds.has(sessionId)) continue;
 
+          // Only include sessions belonging to this workspace
+          if (!this.isSessionForThisWorkspace(sessionCwd)) continue;
+
           // Check if PID is still alive (session is active)
           let isActive = false;
           try {
-            // On Windows, process.kill with signal 0 checks existence
             process.kill(pid, 0);
             isActive = true;
           } catch {
@@ -229,14 +252,11 @@ export class DataProvider {
           const jsonlPath = path.join(projectDir, `${sessionId}.jsonl`);
 
           if (!fs.existsSync(jsonlPath)) {
-            // JSONL not yet written by Claude Code — re-check on next tick
             continue;
           }
 
           knownIds.add(sessionId);
 
-          // Defer full JSONL parsing to first tick — just discover the session path.
-          // This saves ~1-3 full file reads on extension activation.
           this.sessions.push({
             sessionId,
             cwd: sessionCwd,
@@ -256,16 +276,19 @@ export class DataProvider {
             agentList: [],
             toolActivity: new Map<string, { count: number; lastUsed: number; lastFile?: string; agentCalls: Map<string, number> }>(),
             todoItems: [],
-            knownSize: 0, // 0 triggers full incremental read on first tick
+            knownSize: 0,
             knownLines: 0,
+            lastUsageKey: '',
+            subagentCacheKey: '',
+            subagentCacheAgents: [],
+            subagentCacheTodos: [],
           });
         } catch {
           // Skip malformed files
         }
       }
 
-      // FALLBACK: If still no sessions (all PIDs dead or JSONL not yet created),
-      // find the most recently modified JSONL for the current project.
+      // FALLBACK: If still no sessions, find the most recently modified JSONL for this workspace.
       if (this.sessions.length === 0) {
         this.addFallbackSession(projectsDir, knownIds);
       }
@@ -346,6 +369,10 @@ export class DataProvider {
         knownLines: 0,
         currentTool: '',
         currentToolFile: '',
+        lastUsageKey: '',
+        subagentCacheKey: '',
+        subagentCacheAgents: [],
+        subagentCacheTodos: [],
       });
     } catch {
       // Fallback failed silently
@@ -375,7 +402,7 @@ export class DataProvider {
     _cwdPath: string,
     _startedAt: number,
     sessionId: string,
-  ): { inputTokens: number; outputTokens: number; cacheHitTokens: number; cacheWriteTokens: number; lastTask: string; lastActivity: number; lastTimestamp: number; agents: AgentStatus[]; lineCount: number; toolActivity: Map<string, { count: number; lastUsed: number; lastFile?: string; agentCalls: Map<string, number> }>; todoItems: TodoItem[] } {
+  ): { inputTokens: number; outputTokens: number; cacheHitTokens: number; cacheWriteTokens: number; lastTask: string; lastActivity: number; lastTimestamp: number; agents: AgentStatus[]; lineCount: number; toolActivity: Map<string, { count: number; lastUsed: number; lastFile?: string; agentCalls: Map<string, number> }>; todoItems: TodoItem[]; lastUsageKey: string } {
     let inputTokens = 0;
     let outputTokens = 0;
     let cacheHitTokens = 0;
@@ -386,6 +413,7 @@ export class DataProvider {
     let lineCount = 0;
     let lastToolName = '';       // track most recent tool_use in this file
     let lastToolFile = '';
+    let lastUsageKey = '';
     const toolActivity = new Map<string, { count: number; lastUsed: number; lastFile?: string; agentCalls: Map<string, number> }>();
     const todoItems: TodoItem[] = [];
 
@@ -398,16 +426,24 @@ export class DataProvider {
         try {
           const obj = JSON.parse(line);
 
+          // Claude Code can write the same API response 2-3 times (dual-logging).
+          // Skip consecutive duplicates to avoid inflating token counts.
           if (obj.type === 'assistant' && obj.message?.usage) {
             const u = obj.message.usage;
-            inputTokens += u.input_tokens || 0;
-            outputTokens += u.output_tokens || 0;
-            cacheHitTokens += u.cache_read_input_tokens || 0;
-            cacheWriteTokens += u.cache_creation_input_tokens || 0;
-            lastActivity = Date.now();
-            if (obj.timestamp) {
-              lastTimestamp = new Date(obj.timestamp).getTime();
+            const key = `${u.input_tokens}|${u.output_tokens}|${u.cache_creation_input_tokens}|${u.cache_read_input_tokens}`;
+            if (key !== lastUsageKey) {
+              inputTokens += u.input_tokens || 0;
+              outputTokens += u.output_tokens || 0;
+              cacheHitTokens += u.cache_read_input_tokens || 0;
+              cacheWriteTokens += u.cache_creation_input_tokens || 0;
+              lastActivity = Date.now();
+              if (obj.timestamp) {
+                lastTimestamp = new Date(obj.timestamp).getTime();
+              }
             }
+            lastUsageKey = key;
+          } else {
+            lastUsageKey = '';
           }
 
           // Extract tool_use blocks from assistant message content
@@ -482,8 +518,9 @@ export class DataProvider {
       // File may not exist or be unreadable
     }
 
-    // Discover subagents
-    const { agents, todos: subTodos } = this.discoverSubAgents(filePath, sessionId, inputTokens + outputTokens);
+    // Discover subagents (full reparse — always re-read, cache key will mismatch)
+    const tempSession = { jsonlPath: filePath, sessionId, subagentCacheKey: '', subagentCacheAgents: [], subagentCacheTodos: [] } as unknown as ParsedSession;
+    const { agents, todos: subTodos } = this.discoverSubAgents(tempSession);
 
     // Merge subagent todos (dedup by description)
     const mainTodoDescs = new Set(todoItems.map(t => t.description));
@@ -520,6 +557,7 @@ export class DataProvider {
       lineCount,
       toolActivity,
       todoItems,
+      lastUsageKey,
     };
   }
 
@@ -530,7 +568,7 @@ export class DataProvider {
    * calls are no-ops.
    */
   private detectModelFromJsonl(jsonlPath: string, force = false): void {
-    if (this.tokenLimit !== 200000 && !force) return; // already detected
+    if (this.modelDetected && !force) return; // already detected
     try {
       const content = fs.readFileSync(jsonlPath, 'utf8');
       const lines = content.split('\n').filter((l: string) => l.trim());
@@ -546,6 +584,7 @@ export class DataProvider {
             this.tokenLimit = DataProvider.MODEL_LIMITS[modelName];
             this.isAnthropicModel = modelName.startsWith('claude-') || modelName.startsWith('claude');
             this.detectedModelName = modelName;
+            this.modelDetected = true;
             return;
           }
           // Prefix match: "claude-sonnet-4-6-20250514" → match "claude-sonnet-4-6"
@@ -555,6 +594,7 @@ export class DataProvider {
               this.tokenLimit = DataProvider.MODEL_LIMITS[key];
               this.isAnthropicModel = key.startsWith('claude');
               this.detectedModelName = modelName;
+              this.modelDetected = true;
               return;
             }
           }
@@ -599,14 +639,13 @@ export class DataProvider {
 
   /**
    * Read subagent data from the session's subagents directory.
+   * Uses file mtime cache to avoid re-reading unchanged files every tick.
    */
   private discoverSubAgents(
-    jsonlPath: string,
-    sessionId: string,
-    _totalTokens: number,
+    sess: ParsedSession,
   ): { agents: AgentStatus[]; todos: TodoItem[] } {
-    const baseDir = path.dirname(jsonlPath);
-    const sessionDir = path.join(baseDir, sessionId);
+    const baseDir = path.dirname(sess.jsonlPath);
+    const sessionDir = path.join(baseDir, sess.sessionId);
     const subagentsDir = path.join(sessionDir, 'subagents');
     const agents: AgentStatus[] = [];
     const todos: TodoItem[] = [];
@@ -616,6 +655,21 @@ export class DataProvider {
     try {
       const files = fs.readdirSync(subagentsDir);
       const agentFiles = files.filter((f: string) => f.endsWith('.jsonl') && f.startsWith('agent-'));
+
+      // Build cache key from file listing (names + sizes + mtimes)
+      const cacheKey = agentFiles.map(f => {
+        try {
+          const stat = fs.statSync(path.join(subagentsDir, f));
+          return `${f}:${stat.size}:${stat.mtimeMs}`;
+        } catch {
+          return `${f}:0:0`;
+        }
+      }).join('|');
+
+      if (cacheKey === sess.subagentCacheKey && sess.subagentCacheAgents.length > 0) {
+        return { agents: sess.subagentCacheAgents, todos: sess.subagentCacheTodos };
+      }
+      sess.subagentCacheKey = cacheKey;
 
       // First pass: collect all agent info and count per type
       const raw: Array<{
@@ -807,12 +861,12 @@ export class DataProvider {
     let latestTask = 'Idle';
     let allAgents: AgentStatus[] = [];
 
-    // Re-detect model if still at default — picks up models from new sessions
-    if (this.tokenLimit === 200000) {
+    // Re-detect model if not yet detected — picks up models from new sessions
+    if (!this.modelDetected) {
       for (const sess of this.sessions) {
         if (fs.existsSync(sess.jsonlPath)) {
           this.detectModelFromJsonl(sess.jsonlPath);
-          if (this.tokenLimit !== 200000) break;
+          if (this.modelDetected) break;
         }
       }
     }
@@ -838,22 +892,30 @@ export class DataProvider {
           let newOutput = 0;
           let newCacheHit = 0;
           let newCacheWrite = 0;
+          let foundToolUse = false;
 
           for (const line of newLines) {
             try {
               const obj = JSON.parse(line);
 
+              // Token dedup: Claude Code can write the same API response 2-3 times (dual-logging)
               if (obj.type === 'assistant' && obj.message?.usage) {
                 const u = obj.message.usage;
-                newInput += u.input_tokens || 0;
-                newOutput += u.output_tokens || 0;
-                newCacheHit += u.cache_read_input_tokens || 0;
-                newCacheWrite += u.cache_creation_input_tokens || 0;
-                if (obj.timestamp) {
-                  latestActivity = new Date(obj.timestamp).getTime();
-                } else {
-                  latestActivity = Date.now();
+                const key = `${u.input_tokens}|${u.output_tokens}|${u.cache_creation_input_tokens}|${u.cache_read_input_tokens}`;
+                if (key !== sess.lastUsageKey) {
+                  newInput += u.input_tokens || 0;
+                  newOutput += u.output_tokens || 0;
+                  newCacheHit += u.cache_read_input_tokens || 0;
+                  newCacheWrite += u.cache_creation_input_tokens || 0;
+                  if (obj.timestamp) {
+                    latestActivity = new Date(obj.timestamp).getTime();
+                  } else {
+                    latestActivity = Date.now();
+                  }
                 }
+                sess.lastUsageKey = key;
+              } else if (obj.type !== 'assistant') {
+                sess.lastUsageKey = '';
               }
 
               if (obj.type === 'user' && obj.message?.content) {
@@ -869,9 +931,6 @@ export class DataProvider {
 
               // Extract tool_use blocks from new lines (incremental)
               if (obj.type === 'assistant' && obj.message?.content) {
-                // Clear current tool — will be re-set if tool_use found below
-                sess.currentTool = '';
-                sess.currentToolFile = '';
                 const content = Array.isArray(obj.message.content) ? obj.message.content : [];
                 for (const block of content) {
                   if (block.type === 'tool_use' && block.name) {
@@ -895,6 +954,7 @@ export class DataProvider {
 
                     sess.currentTool = toolName;
                     sess.currentToolFile = bashCommand || filePath || '';
+                    foundToolUse = true;
 
                     // Extract todos from TodoWrite tool calls — authoritative full state
                     if (toolName === 'TodoWrite' && input) {
@@ -914,6 +974,13 @@ export class DataProvider {
             } catch {
               // skip malformed lines
             }
+          }
+
+          // Only clear currentTool if no tool_use was found in the new lines
+          // (assistant responded without tools = previous tool is no longer active)
+          if (!foundToolUse) {
+            sess.currentTool = '';
+            sess.currentToolFile = '';
           }
 
           // Update session totals to include new tokens
@@ -947,6 +1014,7 @@ export class DataProvider {
           sess.currentToolFile = parsed.agents[0]?.currentToolFile || '';
           sess.knownSize = newSize;
           sess.knownLines = parsed.lineCount;
+          sess.lastUsageKey = parsed.lastUsageKey;
         }
 
         // Aggregate this session's totals
@@ -959,23 +1027,10 @@ export class DataProvider {
           latestActivity = sess.lastActivity;
         }
 
-        // Re-discover subagents and store them on the session
-        const { agents, todos: subTodos } = this.discoverSubAgents(
-          sess.jsonlPath, sess.sessionId,
-          sess.totalInputTokens + sess.totalOutputTokens,
-        );
+        // Re-discover subagents (cached by file mtime) and store on the session
+        const { agents, todos: subTodos } = this.discoverSubAgents(sess);
         sess.agentList = agents;
-
-        // Merge subagent todos into session todoItems (dedup by description)
-        const existingDescs = new Set(sess.todoItems.map(t => t.description));
-        let mergedCount = 0;
-        for (const st of subTodos) {
-          if (!existingDescs.has(st.description)) {
-            sess.todoItems.push(st);
-            existingDescs.add(st.description);
-            mergedCount++;
-          }
-        }
+        sess.subagentCacheTodos = subTodos;
 
         // Add subagents to the flat list
         for (const agent of agents) {
@@ -1119,11 +1174,17 @@ export class DataProvider {
       }
     }
 
-    // Aggregate todos from all sessions
+    // Aggregate todos from all sessions (main agent + subagent)
     const combinedTodos: TodoItem[] = [];
     const seenTodoDescs = new Set<string>();
     for (const sess of this.sessions) {
       for (const todo of sess.todoItems) {
+        if (!seenTodoDescs.has(todo.description)) {
+          seenTodoDescs.add(todo.description);
+          combinedTodos.push(todo);
+        }
+      }
+      for (const todo of sess.subagentCacheTodos) {
         if (!seenTodoDescs.has(todo.description)) {
           seenTodoDescs.add(todo.description);
           combinedTodos.push(todo);
@@ -1183,8 +1244,15 @@ export class DataProvider {
     }
 
     try {
-      const content = fs.readFileSync(sess.jsonlPath, 'utf8');
-      const lines = content.split('\n').filter((l: string) => l.trim());
+      // Read only the tail of the file (~8KB) to find the last two assistant messages with usage
+      const stat = fs.statSync(sess.jsonlPath);
+      const tailSize = Math.min(stat.size, 8192);
+      const fd = fs.openSync(sess.jsonlPath, 'r');
+      const buf = Buffer.alloc(tailSize);
+      fs.readSync(fd, buf, 0, tailSize, stat.size - tailSize);
+      fs.closeSync(fd);
+      const tailContent = buf.toString('utf8');
+      const lines = tailContent.split('\n').filter((l: string) => l.trim());
 
       // Walk backwards to find the last TWO assistant messages with usage.
       let lastUsage: JsonlUsage | null = null;
@@ -1316,85 +1384,112 @@ export class DataProvider {
   }
 
   /**
-   * Scan the project directory for config files.
-   * Looks at:
-   *   ~/.claude/projects/<sanitized-cwd>/CLAUDE.md
-   *   ~/.claude/projects/<sanitized-cwd>/rules/ directory
-   *   ~/.claude/claude.json for MCP server count
-   *   .claude/ directory in the project root for hooks/settings
+   * Scan config files across user and project scopes.
+   * Reference: claude-hud2/src/config-reader.ts
    */
   private scanConfig(): ConfigCounts {
     const counts: ConfigCounts = { claudeMdFiles: 0, rulesFiles: 0, mcpServers: 0, hooks: 0 };
 
-    if (this.sessions.length === 0) return counts;
-
-    const sess = this.sessions[0];
-    const projectDir = sess.projectDir;
-
-    try {
-      // CLAUDE.md in the project config dir
-      const claudeMdPath = path.join(projectDir, 'CLAUDE.md');
-      if (fs.existsSync(claudeMdPath)) {
-        counts.claudeMdFiles = 1;
-      }
-
-      // rules/ directory
-      const rulesDir = path.join(projectDir, 'rules');
-      if (fs.existsSync(rulesDir)) {
-        try {
-          const files = fs.readdirSync(rulesDir);
-          counts.rulesFiles = files.filter(f => f.endsWith('.md') || f.endsWith('.txt')).length;
-        } catch {
-          // ignore
-        }
-      }
-    } catch {
-      // ignore
+    // === USER SCOPE ===
+    // ~/.claude/CLAUDE.md
+    if (fs.existsSync(path.join(this.claudeDir, 'CLAUDE.md'))) {
+      counts.claudeMdFiles++;
     }
 
-    // MCP servers from claude.json
-    try {
-      const claudeJsonPath = path.join(this.claudeDir, 'claude.json');
-      if (fs.existsSync(claudeJsonPath)) {
-        const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
-        const mcpServers = claudeJson.mcpServers || claudeJson.mcp_config || claudeJson.mcp;
-        if (typeof mcpServers === 'object' && mcpServers !== null) {
-          counts.mcpServers = Object.keys(mcpServers).length;
-        }
-      }
-    } catch {
-      // ignore
-    }
+    // ~/.claude/rules/*.md (recursive)
+    counts.rulesFiles += this.countRulesInDir(path.join(this.claudeDir, 'rules'));
 
-    // Hooks: check ~/.claude/settings.json for hook configuration
-    try {
-      const settingsPath = path.join(this.claudeDir, 'settings.json');
-      if (fs.existsSync(settingsPath)) {
-        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        const hooks = settings.hooks;
-        if (typeof hooks === 'object' && hooks !== null) {
-          const hookCount = Object.keys(hooks).length;
-          if (hookCount > 0) counts.hooks = hookCount;
-        }
+    // ~/.claude/settings.json — MCP servers + hooks
+    const userSettingsPath = path.join(this.claudeDir, 'settings.json');
+    counts.mcpServers += this.countMcpInFile(userSettingsPath);
+    counts.hooks += this.countHooksInFile(userSettingsPath);
+
+    // ~/.claude.json — additional user-scope MCP servers
+    const claudeJsonPath = path.join(this.claudeDir, 'claude.json');
+    counts.mcpServers += this.countMcpInFile(claudeJsonPath);
+
+    // === PROJECT SCOPE ===
+    const projectCwd = this.sessions.length > 0 ? this.sessions[0].cwd : this.cwd;
+
+    if (projectCwd) {
+      // {cwd}/CLAUDE.md
+      if (fs.existsSync(path.join(projectCwd, 'CLAUDE.md'))) {
+        counts.claudeMdFiles++;
       }
-      // Also check .claude/ in the current workspace
-      const localClaudeDir = path.join(path.dirname(this.cwd), '.claude');
-      if (fs.existsSync(localClaudeDir)) {
-        const hooksDir = path.join(localClaudeDir, 'hooks');
-        if (fs.existsSync(hooksDir)) {
-          try {
-            const hookFiles = fs.readdirSync(hooksDir);
-            counts.hooks += hookFiles.filter(f => f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.mjs')).length;
-          } catch {
-            // ignore
-          }
-        }
+
+      // {cwd}/CLAUDE.local.md
+      if (fs.existsSync(path.join(projectCwd, 'CLAUDE.local.md'))) {
+        counts.claudeMdFiles++;
       }
-    } catch {
-      // ignore
+
+      // {cwd}/.claude/CLAUDE.md
+      if (fs.existsSync(path.join(projectCwd, '.claude', 'CLAUDE.md'))) {
+        counts.claudeMdFiles++;
+      }
+
+      // {cwd}/.claude/CLAUDE.local.md
+      if (fs.existsSync(path.join(projectCwd, '.claude', 'CLAUDE.local.md'))) {
+        counts.claudeMdFiles++;
+      }
+
+      // {cwd}/.claude/rules/*.md (recursive)
+      counts.rulesFiles += this.countRulesInDir(path.join(projectCwd, '.claude', 'rules'));
+
+      // {cwd}/.mcp.json — project MCP config
+      counts.mcpServers += this.countMcpInFile(path.join(projectCwd, '.mcp.json'));
+
+      // {cwd}/.claude/settings.json — project settings (MCP + hooks)
+      const projectSettingsPath = path.join(projectCwd, '.claude', 'settings.json');
+      counts.mcpServers += this.countMcpInFile(projectSettingsPath);
+      counts.hooks += this.countHooksInFile(projectSettingsPath);
+
+      // {cwd}/.claude/settings.local.json — local project settings
+      const localSettingsPath = path.join(projectCwd, '.claude', 'settings.local.json');
+      counts.mcpServers += this.countMcpInFile(localSettingsPath);
+      counts.hooks += this.countHooksInFile(localSettingsPath);
     }
 
     return counts;
+  }
+
+  private countMcpInFile(filePath: string): number {
+    try {
+      if (!fs.existsSync(filePath)) return 0;
+      const config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (config.mcpServers && typeof config.mcpServers === 'object') {
+        return Object.keys(config.mcpServers).length;
+      }
+    } catch { /* ignore */ }
+    return 0;
+  }
+
+  private countHooksInFile(filePath: string): number {
+    try {
+      if (!fs.existsSync(filePath)) return 0;
+      const config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (config.hooks && typeof config.hooks === 'object') {
+        return Object.keys(config.hooks).length;
+      }
+    } catch { /* ignore */ }
+    return 0;
+  }
+
+  private countRulesInDir(rulesDir: string): number {
+    try {
+      if (!fs.existsSync(rulesDir)) return 0;
+      let count = 0;
+      const entries = fs.readdirSync(rulesDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(rulesDir, entry.name);
+        if (entry.isDirectory()) {
+          count += this.countRulesInDir(fullPath);
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          count++;
+        }
+      }
+      return count;
+    } catch { /* ignore */ }
+    return 0;
   }
 
   /** Generate 20 initial candles so the chart isn't empty at first render */
