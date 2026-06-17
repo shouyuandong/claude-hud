@@ -31,18 +31,8 @@ export interface HUDData {
   // multi-agent
   agents: AgentStatus[];
 
-  // config stats
-  configCounts: ConfigCounts;
-
   // todo items
   todos: TodoItem[];
-}
-
-export interface ConfigCounts {
-  claudeMdFiles: number;
-  rulesFiles: number;
-  mcpServers: number;
-  hooks: number;
 }
 
 export interface TodoItem {
@@ -98,7 +88,6 @@ export interface HUDModuleConfig {
   historyChart: boolean;
   sessionTime: boolean;
   cost: boolean;
-  configStats: boolean;
   todos: boolean;
 }
 

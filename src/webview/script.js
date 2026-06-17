@@ -142,7 +142,6 @@ let modules = {
   historyChart: true,
   sessionTime: true,
   cost: true,
-  configStats: true,
   todos: true,
 };
 let chartMode = '24h';
@@ -502,7 +501,6 @@ function renderAll(data) {
   renderSessionTime(data);
   renderHeaderStatus(data);
   renderCost(data);
-  renderConfigStats(data);
   renderTodos(data);
 }
 
@@ -1223,25 +1221,6 @@ function renderCost(data) {
   if (outEl) outEl.textContent = formatTokens(data.outputTokens || 0);
   if (cacheREl) cacheREl.textContent = formatTokens(data.cacheHitTokens || 0);
   if (cacheWEl) cacheWEl.textContent = formatTokens(data.cacheWriteTokens || 0);
-}
-
-// ---- Config Stats ----
-function renderConfigStats(data) {
-  const cc = data.configCounts;
-  if (!cc) return;
-
-  const setVal = (id, val) => {
-    const el = $(id);
-    if (el) {
-      el.textContent = String(val);
-      el.style.color = val > 0 ? theme.accent : theme.textMuted;
-    }
-  };
-
-  setVal('configClaudeMdValue', cc.claudeMdFiles || 0);
-  setVal('configRulesValue', cc.rulesFiles || 0);
-  setVal('configMcpValue', cc.mcpServers || 0);
-  setVal('configHooksValue', cc.hooks || 0);
 }
 
 // ---- Todos ----

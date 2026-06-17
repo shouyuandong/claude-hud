@@ -14,7 +14,6 @@ export interface LocaleStrings {
     agentStatus: string;
     todos: string;
     history: string;
-    config: string;
     sessionTime: string;
   };
   chart: {
@@ -30,7 +29,6 @@ export interface LocaleStrings {
     historyChart: string;
     sessionTime: string;
     cost: string;
-    config: string;
     todos: string;
   };
   agent: {
@@ -62,12 +60,6 @@ export interface LocaleStrings {
     cacheR: string;
     cacheW: string;
   };
-  config: {
-    claudeMd: string;
-    rules: string;
-    mcp: string;
-    hooks: string;
-  };
   footer: {
     session: string; // Session:
   };
@@ -87,7 +79,6 @@ const en: LocaleStrings = {
     agentStatus: 'Agent Status',
     todos: 'Todos',
     history: 'History',
-    config: 'Config',
     sessionTime: 'Session',
   },
   chart: {
@@ -103,7 +94,6 @@ const en: LocaleStrings = {
     historyChart: 'History Chart',
     sessionTime: 'Session Timer',
     cost: 'Cost',
-    config: 'Config',
     todos: 'Todos',
   },
   agent: {
@@ -135,12 +125,6 @@ const en: LocaleStrings = {
     cacheR: 'CACHE R',
     cacheW: 'CACHE W',
   },
-  config: {
-    claudeMd: 'CLAUDE.md',
-    rules: 'Rules',
-    mcp: 'MCP',
-    hooks: 'Hooks',
-  },
   footer: {
     session: 'Session:',
   },
@@ -160,7 +144,6 @@ const zh: LocaleStrings = {
     agentStatus: 'Agent 状态',
     todos: '待办',
     history: '历史',
-    config: '配置',
     sessionTime: '会话',
   },
   chart: {
@@ -176,7 +159,6 @@ const zh: LocaleStrings = {
     historyChart: '历史图表',
     sessionTime: '会话计时',
     cost: '费用',
-    config: '配置',
     todos: '待办',
   },
   agent: {
@@ -208,12 +190,6 @@ const zh: LocaleStrings = {
     cacheR: '缓存读',
     cacheW: '缓存写',
   },
-  config: {
-    claudeMd: 'CLAUDE.md',
-    rules: '规则',
-    mcp: 'MCP',
-    hooks: '钩子',
-  },
   footer: {
     session: '会话:',
   },
@@ -233,7 +209,6 @@ const ja: LocaleStrings = {
     agentStatus: 'Agent 状態',
     todos: 'TODO',
     history: '履歴',
-    config: '設定',
     sessionTime: 'セッション',
   },
   chart: {
@@ -249,7 +224,6 @@ const ja: LocaleStrings = {
     historyChart: '履歴チャート',
     sessionTime: 'セッション時間',
     cost: 'コスト',
-    config: '設定',
     todos: 'TODO',
   },
   agent: {
@@ -280,12 +254,6 @@ const ja: LocaleStrings = {
     out: '出力',
     cacheR: 'キャッシュ読',
     cacheW: 'キャッシュ書',
-  },
-  config: {
-    claudeMd: 'CLAUDE.md',
-    rules: 'ルール',
-    mcp: 'MCP',
-    hooks: 'フック',
   },
   footer: {
     session: 'セッション:',

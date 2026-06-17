@@ -11,7 +11,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // ---- Init components ----
   const configManager = new ConfigManager();
   const historyStore = new HistoryStore(context);
-  const dataProvider = new DataProvider(configManager, historyStore);
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  const dataProvider = new DataProvider(configManager, historyStore, workspaceFolders);
   const statusBar = new StatusBarManager();
 
   // ---- Register webview provider ----

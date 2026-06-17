@@ -2,7 +2,7 @@
   "name": "claude-hud",
   "displayName": "Claude HUD",
   "description": "Real-time token usage, context length, and task progress HUD for Claude Code",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "icon": "media/icon.png",
   "publisher": "shouyuandong",
   "repository": {
@@ -65,7 +65,6 @@
             "historyChart": true,
             "sessionTime": true,
             "cost": true,
-            "configStats": true,
             "todos": true
           },
           "description": "Toggle visibility of each HUD module",
@@ -76,7 +75,6 @@
             "historyChart": { "type": "boolean", "description": "Show historical token chart" },
             "sessionTime": { "type": "boolean", "description": "Show session timer" },
             "cost": { "type": "boolean", "description": "Show cost breakdown" },
-            "configStats": { "type": "boolean", "description": "Show config statistics" },
             "todos": { "type": "boolean", "description": "Show todo list" }
           }
         },

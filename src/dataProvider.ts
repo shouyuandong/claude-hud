@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { HUDData, AgentStatus, HourlyTokenData, DailyTokenData, CandleData, ConfigCounts, TodoItem, PricingOverride } from './types';
+import { HUDData, AgentStatus, HourlyTokenData, DailyTokenData, CandleData, TodoItem, PricingOverride } from './types';
 import { ConfigManager } from './configManager';
 import { HistoryStore } from './historyStore';
+import * as vscode from 'vscode';
 
 /**
  * Real data provider that reads Claude Code session & conversation files
@@ -68,11 +69,15 @@ interface ParsedSession {
   subagentCacheKey: string;
   subagentCacheAgents: AgentStatus[];
   subagentCacheTodos: TodoItem[];
+  // Per-session model detection
+  modelDetected: boolean;
+  modelName: string;
+  tokenLimit: number;
 }
 
 export class DataProvider {
   private sessions: ParsedSession[] = [];
-  private cwd = process.cwd();
+  private workspaceRoot?: string;
 
   // Derived burst-rate state (same interface as before)
   private burstRate = 0;
@@ -185,10 +190,11 @@ export class DataProvider {
   private configManager: ConfigManager;
   private historyStore: HistoryStore;
 
-  constructor(configManager: ConfigManager, historyStore: HistoryStore) {
+  constructor(configManager: ConfigManager, historyStore: HistoryStore, workspaceFolders?: readonly vscode.WorkspaceFolder[]) {
     this.configManager = configManager;
     this.historyStore = historyStore;
     this.claudeDir = path.join(os.homedir(), '.claude');
+    this.workspaceRoot = workspaceFolders?.[0]?.uri?.fsPath;
     this.discoverSessions();
   }
 
@@ -198,10 +204,11 @@ export class DataProvider {
    */
   private isSessionForThisWorkspace(sessionCwd: string): boolean {
     if (!sessionCwd) return false;
+    const workspaceRoot = this.workspaceRoot ?? process.cwd();
     const normalizedSession = path.normalize(sessionCwd).toLowerCase();
-    const normalizedCwd = path.normalize(this.cwd).toLowerCase();
+    const normalizedRoot = path.normalize(workspaceRoot).toLowerCase();
     // Exact match or session is inside our workspace
-    return normalizedSession === normalizedCwd || normalizedSession.startsWith(normalizedCwd + path.sep);
+    return normalizedSession === normalizedRoot || normalizedSession.startsWith(normalizedRoot + path.sep);
   }
 
   /**
@@ -282,6 +289,9 @@ export class DataProvider {
             subagentCacheKey: '',
             subagentCacheAgents: [],
             subagentCacheTodos: [],
+            modelDetected: false,
+            modelName: '',
+            tokenLimit: 200000,
           });
         } catch {
           // Skip malformed files
@@ -304,7 +314,7 @@ export class DataProvider {
    * whose PID doesn't match the session file.
    */
   private addFallbackSession(projectsDir: string, knownIds: Set<string>): void {
-    const currentProjectName = this.cwdToProjectName(this.cwd);
+    const currentProjectName = this.cwdToProjectName(this.workspaceRoot ?? process.cwd());
     const projectDir = path.join(projectsDir, currentProjectName);
     if (!fs.existsSync(projectDir)) return;
 
@@ -350,7 +360,7 @@ export class DataProvider {
       // Defer parsing to first tick
       this.sessions.push({
         sessionId,
-        cwd: this.cwd,
+        cwd: this.workspaceRoot ?? process.cwd(),
         projectDir,
         jsonlPath,
         startedAt,
@@ -373,6 +383,9 @@ export class DataProvider {
         subagentCacheKey: '',
         subagentCacheAgents: [],
         subagentCacheTodos: [],
+        modelDetected: false,
+        modelName: '',
+        tokenLimit: 200000,
       });
     } catch {
       // Fallback failed silently
@@ -562,15 +575,15 @@ export class DataProvider {
   }
 
   /**
-   * Scan the entire JSONL for the model name and set tokenLimit accordingly.
+   * Scan a session's JSONL for the model name and set per-session tokenLimit.
    * Starts from the end (most recent messages) and walks backwards,
-   * so the latest model declaration wins. Caches once found so subsequent
-   * calls are no-ops.
+   * so the latest model declaration wins. Caches per-session so subsequent
+   * calls are no-ops once each session is detected.
    */
-  private detectModelFromJsonl(jsonlPath: string, force = false): void {
-    if (this.modelDetected && !force) return; // already detected
+  private detectModelForSession(sess: ParsedSession): void {
+    if (sess.modelDetected) return; // already detected for this session
     try {
-      const content = fs.readFileSync(jsonlPath, 'utf8');
+      const content = fs.readFileSync(sess.jsonlPath, 'utf8');
       const lines = content.split('\n').filter((l: string) => l.trim());
       // Walk backwards — most recent model declaration is most accurate
       for (let i = lines.length - 1; i >= 0; i--) {
@@ -581,20 +594,18 @@ export class DataProvider {
         if (modelName && typeof modelName === 'string') {
           // Exact match
           if (DataProvider.MODEL_LIMITS[modelName]) {
-            this.tokenLimit = DataProvider.MODEL_LIMITS[modelName];
-            this.isAnthropicModel = modelName.startsWith('claude-') || modelName.startsWith('claude');
-            this.detectedModelName = modelName;
-            this.modelDetected = true;
+            sess.tokenLimit = DataProvider.MODEL_LIMITS[modelName];
+            sess.modelName = modelName;
+            sess.modelDetected = true;
             return;
           }
           // Prefix match: "claude-sonnet-4-6-20250514" → match "claude-sonnet-4-6"
           const sortedKeys = Object.keys(DataProvider.MODEL_LIMITS).sort((a, b) => b.length - a.length);
           for (const key of sortedKeys) {
             if (modelName.startsWith(key)) {
-              this.tokenLimit = DataProvider.MODEL_LIMITS[key];
-              this.isAnthropicModel = key.startsWith('claude');
-              this.detectedModelName = modelName;
-              this.modelDetected = true;
+              sess.tokenLimit = DataProvider.MODEL_LIMITS[key];
+              sess.modelName = modelName;
+              sess.modelDetected = true;
               return;
             }
           }
@@ -861,13 +872,10 @@ export class DataProvider {
     let latestTask = 'Idle';
     let allAgents: AgentStatus[] = [];
 
-    // Re-detect model if not yet detected — picks up models from new sessions
-    if (!this.modelDetected) {
-      for (const sess of this.sessions) {
-        if (fs.existsSync(sess.jsonlPath)) {
-          this.detectModelFromJsonl(sess.jsonlPath);
-          if (this.modelDetected) break;
-        }
+    // Per-session model detection — detect independently for each session
+    for (const sess of this.sessions) {
+      if (!sess.modelDetected && fs.existsSync(sess.jsonlPath)) {
+        this.detectModelForSession(sess);
       }
     }
 
@@ -1076,6 +1084,15 @@ export class DataProvider {
     if (this.sessions.length > 0) {
       this.planMode = this.detectPlanModeFromJsonl(this.sessions[0].jsonlPath);
     }
+
+    // Derive global model info from first active session with detected model
+    const modelSession = this.sessions.find(s => s.isActive && s.modelDetected)
+      || this.sessions.find(s => s.modelDetected);
+    if (modelSession) {
+      this.tokenLimit = modelSession.tokenLimit;
+      this.detectedModelName = modelSession.modelName;
+      this.isAnthropicModel = modelSession.modelName.startsWith('claude-');
+    }
   }
 
   /** Return a HUDData snapshot built from real Claude Code data */
@@ -1215,7 +1232,6 @@ export class DataProvider {
       hourlyHistory: this.historyStore.getHourlyHistory(),
       dailyHistory: this.historyStore.getDailyHistory(),
       agents: allAgents.slice(0, 20),
-      configCounts: this.scanConfig(),
       todos: combinedTodos,
     };
   }
@@ -1381,115 +1397,6 @@ export class DataProvider {
       (this.totalCacheHitTokens / 1_000_000) * pricing.cacheRead +
       (this.totalCacheWriteTokens / 1_000_000) * pricing.cacheWrite;
     return Math.round(cost * 10000) / 10000; // 4 decimal places
-  }
-
-  /**
-   * Scan config files across user and project scopes.
-   * Reference: claude-hud2/src/config-reader.ts
-   */
-  private scanConfig(): ConfigCounts {
-    const counts: ConfigCounts = { claudeMdFiles: 0, rulesFiles: 0, mcpServers: 0, hooks: 0 };
-
-    // === USER SCOPE ===
-    // ~/.claude/CLAUDE.md
-    if (fs.existsSync(path.join(this.claudeDir, 'CLAUDE.md'))) {
-      counts.claudeMdFiles++;
-    }
-
-    // ~/.claude/rules/*.md (recursive)
-    counts.rulesFiles += this.countRulesInDir(path.join(this.claudeDir, 'rules'));
-
-    // ~/.claude/settings.json — MCP servers + hooks
-    const userSettingsPath = path.join(this.claudeDir, 'settings.json');
-    counts.mcpServers += this.countMcpInFile(userSettingsPath);
-    counts.hooks += this.countHooksInFile(userSettingsPath);
-
-    // ~/.claude.json — additional user-scope MCP servers
-    const claudeJsonPath = path.join(this.claudeDir, 'claude.json');
-    counts.mcpServers += this.countMcpInFile(claudeJsonPath);
-
-    // === PROJECT SCOPE ===
-    const projectCwd = this.sessions.length > 0 ? this.sessions[0].cwd : this.cwd;
-
-    if (projectCwd) {
-      // {cwd}/CLAUDE.md
-      if (fs.existsSync(path.join(projectCwd, 'CLAUDE.md'))) {
-        counts.claudeMdFiles++;
-      }
-
-      // {cwd}/CLAUDE.local.md
-      if (fs.existsSync(path.join(projectCwd, 'CLAUDE.local.md'))) {
-        counts.claudeMdFiles++;
-      }
-
-      // {cwd}/.claude/CLAUDE.md
-      if (fs.existsSync(path.join(projectCwd, '.claude', 'CLAUDE.md'))) {
-        counts.claudeMdFiles++;
-      }
-
-      // {cwd}/.claude/CLAUDE.local.md
-      if (fs.existsSync(path.join(projectCwd, '.claude', 'CLAUDE.local.md'))) {
-        counts.claudeMdFiles++;
-      }
-
-      // {cwd}/.claude/rules/*.md (recursive)
-      counts.rulesFiles += this.countRulesInDir(path.join(projectCwd, '.claude', 'rules'));
-
-      // {cwd}/.mcp.json — project MCP config
-      counts.mcpServers += this.countMcpInFile(path.join(projectCwd, '.mcp.json'));
-
-      // {cwd}/.claude/settings.json — project settings (MCP + hooks)
-      const projectSettingsPath = path.join(projectCwd, '.claude', 'settings.json');
-      counts.mcpServers += this.countMcpInFile(projectSettingsPath);
-      counts.hooks += this.countHooksInFile(projectSettingsPath);
-
-      // {cwd}/.claude/settings.local.json — local project settings
-      const localSettingsPath = path.join(projectCwd, '.claude', 'settings.local.json');
-      counts.mcpServers += this.countMcpInFile(localSettingsPath);
-      counts.hooks += this.countHooksInFile(localSettingsPath);
-    }
-
-    return counts;
-  }
-
-  private countMcpInFile(filePath: string): number {
-    try {
-      if (!fs.existsSync(filePath)) return 0;
-      const config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      if (config.mcpServers && typeof config.mcpServers === 'object') {
-        return Object.keys(config.mcpServers).length;
-      }
-    } catch { /* ignore */ }
-    return 0;
-  }
-
-  private countHooksInFile(filePath: string): number {
-    try {
-      if (!fs.existsSync(filePath)) return 0;
-      const config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      if (config.hooks && typeof config.hooks === 'object') {
-        return Object.keys(config.hooks).length;
-      }
-    } catch { /* ignore */ }
-    return 0;
-  }
-
-  private countRulesInDir(rulesDir: string): number {
-    try {
-      if (!fs.existsSync(rulesDir)) return 0;
-      let count = 0;
-      const entries = fs.readdirSync(rulesDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(rulesDir, entry.name);
-        if (entry.isDirectory()) {
-          count += this.countRulesInDir(fullPath);
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          count++;
-        }
-      }
-      return count;
-    } catch { /* ignore */ }
-    return 0;
   }
 
   /** Generate 20 initial candles so the chart isn't empty at first render */

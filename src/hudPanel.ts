@@ -249,33 +249,6 @@ export class HUDPanelProvider implements vscode.WebviewViewProvider {
       </div>
       <div class="chart-total" id="chartTotal">--</div>
     </section>
-
-    <!-- Config Stats -->
-    <section class="hud-module" id="mod-configStats" data-module="configStats" draggable="true">
-      <div class="module-title">
-        <span class="drag-handle">⠿</span>
-        <span class="title-text">${l.modules.config}</span>
-        <span class="title-spacer"></span>
-      </div>
-      <div class="config-grid" id="configGrid">
-        <div class="config-card" id="configClaudeMd">
-          <span class="config-card-value" id="configClaudeMdValue">0</span>
-          <span class="config-card-label">${l.config.claudeMd}</span>
-        </div>
-        <div class="config-card" id="configRules">
-          <span class="config-card-value" id="configRulesValue">0</span>
-          <span class="config-card-label">${l.config.rules}</span>
-        </div>
-        <div class="config-card" id="configMcp">
-          <span class="config-card-value" id="configMcpValue">0</span>
-          <span class="config-card-label">${l.config.mcp}</span>
-        </div>
-        <div class="config-card" id="configHooks">
-          <span class="config-card-value" id="configHooksValue">0</span>
-          <span class="config-card-label">${l.config.hooks}</span>
-        </div>
-      </div>
-    </section>
   </div>
 
   <!-- Footer -->
@@ -293,7 +266,6 @@ export class HUDPanelProvider implements vscode.WebviewViewProvider {
       <label class="settings-item"><input type="checkbox" data-key="historyChart" checked/> ${l.settings.historyChart}</label>
       <label class="settings-item"><input type="checkbox" data-key="sessionTime" checked/> ${l.settings.sessionTime}</label>
       <label class="settings-item"><input type="checkbox" data-key="cost" checked/> ${l.settings.cost}</label>
-      <label class="settings-item"><input type="checkbox" data-key="configStats" checked/> ${l.settings.config}</label>
       <label class="settings-item"><input type="checkbox" data-key="todos" checked/> ${l.settings.todos}</label>
     </div>
   </div>

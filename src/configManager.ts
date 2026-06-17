@@ -8,7 +8,6 @@ const DEFAULT_MODULES: HUDModuleConfig = {
   historyChart: true,
   sessionTime: true,
   cost: true,
-  configStats: true,
   todos: true,
 };
 
